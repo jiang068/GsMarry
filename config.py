@@ -4,6 +4,9 @@ from gsuid_core.utils.plugins_config.gs_config import StringConfig
 from gsuid_core.utils.plugins_config.models import GSC, GsStrConfig, GsBoolConfig, GsIntConfig
 
 CONFIG_DEFAULT: Dict[str, GSC] = {
+    # ---- 新增的两条配置 ----
+    'cp_bg_image': GsStrConfig('CP榜背景图', '绝对或相对路径，留空使用默认蓝粉渐变', ''),
+    'cp_font_path': GsStrConfig('CP榜字体路径', '绝对或相对路径，留空使用内置 MiSans', ''),
     'marry_triggers': GsStrConfig('娶群友触发词', '多词逗号分隔', '娶群友,waifu,wife'),
     'enable_avatar': GsBoolConfig('启用头像显示', '是否发送头像', True),
     'user_pool_days': GsIntConfig('用户池天数', '近几天发言有效', 3, 30),

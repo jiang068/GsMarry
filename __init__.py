@@ -4,9 +4,11 @@ from gsuid_core.models import Event
 from gsuid_core.logger import logger
 from datetime import datetime
 
+from .draw import draw_cp_image
+
 from .core import (
     record_speak, process_marry, process_force_marry,
-    process_divorce, get_cps, get_force_record, load_data, save_data
+    process_divorce, get_cps_data, get_force_record, load_data, save_data
 )
 from .utils import get_user_nickname, get_avatar_image
 from .config import marry_config
@@ -85,14 +87,20 @@ async def _divorce(bot: Bot, ev: Event):
         await bot.send(marry_config.get_config('no_marriage_message').data)
 
 # 今日CP榜
+# --- 2. 请替换掉旧的 _cp 函数 ---
 @gs_marry.on_fullmatch('今日cp')
 async def _cp(bot: Bot, ev: Event):
     if not ev.group_id: return
-    cps = get_cps(ev.group_id)
-    if not cps:
+    
+    # 获取结构化数据
+    cps_data = get_cps_data(ev.group_id)
+    if not cps_data:
         return await bot.send(marry_config.get_config('no_marriage_today_message').data)
+    
+    # 生成榜单图并发送
     title = marry_config.get_config('today_cp_list_title').data
-    await bot.send(f"{title}\n" + "\n".join(cps))
+    img_bytes = draw_cp_image(cps_data, title)
+    await bot.send(img_bytes)
 
 # 强娶记录
 @gs_marry.on_fullmatch('强娶记录')
