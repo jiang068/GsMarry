@@ -4,33 +4,57 @@ from datetime import datetime, timedelta
 from gsuid_core.data_store import get_res_path
 from .config import marry_config
 
-# 使用框架自带的路径生成器规范化数据路径
 DATA_DIR = get_res_path('GsMarry')
 if not DATA_DIR.exists():
     DATA_DIR.mkdir(parents=True)
+
+# 【优化 1】：全局内存数据缓存，避免重复读盘
+_data_cache = {}
 
 def get_today() -> str:
     return datetime.now().strftime('%Y-%m-%d')
 
 def load_data(gid: str) -> dict:
+    # 命中内存缓存，直接返回（0 I/O）
+    if gid in _data_cache:
+        return _data_cache[gid]
+        
     f = DATA_DIR / f"{gid}.json"
-    return json.loads(f.read_text('utf-8')) if f.exists() else {"users": {}, "daily": {}}
+    if f.exists():
+        try:
+            data = json.loads(f.read_text('utf-8'))
+        except:
+            data = {"users": {}, "daily": {}}
+    else:
+        data = {"users": {}, "daily": {}}
+        
+    _data_cache[gid] = data
+    return data
 
 def save_data(gid: str, data: dict):
+    # 更新内存并写入硬盘
+    _data_cache[gid] = data
     (DATA_DIR / f"{gid}.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), 'utf-8')
 
 def get_daily(data: dict) -> dict:
     t = get_today()
     if t not in data["daily"]: 
         data["daily"][t] = {"couples": {}, "forces": {}, "divorced": []}
-    # 兼容老数据，如果没有 divorced 列表则补上
     if "divorced" not in data["daily"][t]:
         data["daily"][t]["divorced"] = []
     return data["daily"][t]
 
 def record_speak(gid: str, uid: str, name: str):
     d = load_data(gid)
-    d["users"][uid] = {"name": name, "last": get_today()}
+    today = get_today()
+    user_info = d["users"].get(uid)
+    
+    # 【极致优化】：如果今天已经记录过该用户，且名字没变，直接跳过！
+    # 将 O(消息数) 的磁盘写入量，骤降为 O(活跃人数)
+    if user_info and user_info.get("last") == today and user_info.get("name") == name:
+        return
+        
+    d["users"][uid] = {"name": name, "last": today}
     save_data(gid, d)
 
 def get_active_users(d: dict) -> list:
@@ -43,11 +67,9 @@ def get_active_users(d: dict) -> list:
     return active
 
 def process_marry(gid: str, uid: str) -> tuple[int, str, str]:
-    # 状态码 -> 0: 成功, 1: 已有配偶, 3: 池子空
     d = load_data(gid)
     daily = get_daily(d)
 
-    # 只要存在双向绑定中，就说明已婚
     if uid in daily["couples"]:
         partner = daily["couples"][uid]
         return 1, partner, d["users"].get(partner, {}).get("name", partner)
@@ -59,7 +81,6 @@ def process_marry(gid: str, uid: str) -> tuple[int, str, str]:
         return 3, "", ""
 
     partner = random.choice(available)
-    # 建立绝对对称的双向绑定
     daily["couples"][uid] = partner
     daily["couples"][partner] = uid
     save_data(gid, d)
@@ -96,15 +117,12 @@ def process_force_marry(gid: str, uid: str, target: str, target_name: str) -> tu
         save_data(gid, d)
         return False, marry_config.get_config('force_marry_failed_message').data.format(remaining=rem)
 
-    # 强娶成功
     forces["success"] += 1
     if target_married:
         old_partner = daily["couples"][target]
-        # 【新增】横刀夺爱导致原配偶被动离婚，记录到离婚池中
         daily["divorced"].append((target, old_partner))
-        del daily["couples"][old_partner] # 踢掉原来的配偶
+        del daily["couples"][old_partner]
 
-    # 建立新的双向绑定
     daily["couples"][uid] = target
     daily["couples"][target] = uid
 
@@ -122,10 +140,7 @@ def process_divorce(gid: str, uid: str) -> tuple[bool, str, str]:
     if uid not in daily["couples"]:
         return False, "", ""
 
-    # 解除双向绑定
     partner = daily["couples"][uid]
-    
-    # 【新增】将这对苦命鸳鸯加入离婚记录表
     daily["divorced"].append((uid, partner))
 
     del daily["couples"][uid]
@@ -136,12 +151,10 @@ def process_divorce(gid: str, uid: str) -> tuple[bool, str, str]:
     return True, d["users"].get(uid, {}).get("name", uid), d["users"].get(partner, {}).get("name", partner)
 
 def get_cps_data(gid: str) -> list:
-    """返回结构化的CP列表供绘图使用：[(名字1, 名字2, 是否处于结婚状态)]"""
     d = load_data(gid)
     daily = get_daily(d)
     seen, res = set(), []
     
-    # 1. 获取当前热恋中的CP
     for u1, u2 in daily["couples"].items():
         if u1 in seen or u2 in seen: continue
         seen.add(u1); seen.add(u2)
@@ -149,7 +162,6 @@ def get_cps_data(gid: str) -> list:
         n2 = d["users"].get(u2, {}).get("name", u2)
         res.append((n1, n2, True))
         
-    # 2. 获取今日离婚的CP
     for u1, u2 in daily.get("divorced", []):
         n1 = d["users"].get(u1, {}).get("name", u1)
         n2 = d["users"].get(u2, {}).get("name", u2)
