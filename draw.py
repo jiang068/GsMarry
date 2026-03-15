@@ -73,7 +73,7 @@ def generate_glass_bg(width: int, height: int, margin: int, radius: int = 20) ->
     return bg
 
 def draw_cp_image(cps_data: list, title: str) -> bytes:
-    """绘制今日CP榜单图 (支持超长名字自动换行)"""
+    """绘制今日CP榜单图 (支持超长名字自动换行，并使用图片爱心)"""
     width = 800
     title_h = 100
     margin = 25  
@@ -81,25 +81,30 @@ def draw_cp_image(cps_data: list, title: str) -> bytes:
     
     font_title = get_font(42)
     font_item = get_font(30)
-    font_icon = get_font(28) 
     
-    max_name_width = (width - margin * 2) // 2 - 60 
+    # 预加载 assets 目录下的图片爱心，转换成 RGBA 保留透明通道
+    assets_dir = Path(__file__).parent / 'assets'
+    heart_path = assets_dir / 'heart.png'
+    broken_heart_path = assets_dir / 'broken_heart.png'
+    
+    heart_img = Image.open(heart_path).convert("RGBA") if heart_path.exists() else None
+    broken_heart_img = Image.open(broken_heart_path).convert("RGBA") if broken_heart_path.exists() else None
+    
+    # 根据爱心图片的宽度预留中间的空间
+    icon_width = max(heart_img.width if heart_img else 40, broken_heart_img.width if broken_heart_img else 40)
+    max_name_width = (width - margin * 2) // 2 - (icon_width // 2) - 20 
     
     # 1. 预计算每一行的高度，并进行文本换行处理
     parsed_cps = []
     total_list_h = 0
-    line_spacing = 38 # 多行文本的行高
-    min_row_h = 65    # 单行最小高度
+    line_spacing = 38 
+    min_row_h = 65    
     
     for n1, n2, is_married in cps_data:
-        # 左侧名字换行计算
         lines1 = wrap_text(n1, font_item, max_name_width)
-        
-        # 右侧名字换行计算 (包含离婚后缀)
         right_str = n2 if is_married else f"{n2} (离)"
         lines2 = wrap_text(right_str, font_item, max_name_width)
         
-        # 这一行的高度取决于左右哪边行数更多
         max_lines = max(len(lines1), len(lines2))
         row_h = max(min_row_h, max_lines * line_spacing + 20)
         
@@ -124,22 +129,21 @@ def draw_cp_image(cps_data: list, title: str) -> bytes:
     line_y = margin + 85
     draw.line((margin + 40, line_y, width - margin - 40, line_y), fill=(180, 180, 180), width=2)
     
-    # 4. 绘制CP条目 (支持多行、精准对齐)
+    # 4. 绘制CP条目
     current_y = line_y + 40
     for cp in parsed_cps:
-        # 当前行的垂直中心点
         row_center_y = current_y + cp['row_h'] // 2 - 10
         
         if cp['is_married']:
             color_text = (60, 60, 60)
-            color_heart = (230, 60, 100)
+            current_icon = heart_img
         else:
             color_text = (120, 120, 120)
-            color_heart = (150, 150, 150)
+            current_icon = broken_heart_img
 
-        # 左名字 (多行，向右对齐排版)
+        # 绘制左名字 (向右对齐)
         draw.multiline_text(
-            (center_x - 25, row_center_y), 
+            (center_x - (icon_width // 2) - 10, row_center_y), 
             cp['n1_text'], 
             font=font_item, 
             fill=color_text, 
@@ -148,18 +152,20 @@ def draw_cp_image(cps_data: list, title: str) -> bytes:
             spacing=8
         )
         
-        # 爱心 (绝对居中)
-        draw.text(
-            (center_x, row_center_y), 
-            "❤", 
-            font=font_icon, 
-            fill=color_heart, 
-            anchor="mm"
-        )
+        # 居中贴上高清图片爱心
+        if current_icon:
+            # 计算图片贴图的左上角绝对坐标
+            paste_x = center_x - current_icon.width // 2
+            paste_y = int(row_center_y) - current_icon.height // 2
+            # 第三个参数 current_icon 作为 mask（蒙版），确保背景透明
+            bg.paste(current_icon, (paste_x, paste_y), current_icon)
+        else:
+            # 兼容性兜底：万一图片被删了，用灰色纯文本表示
+            draw.text((center_x, row_center_y), "X", font=font_item, fill=(180, 180, 180), anchor="mm")
         
-        # 右名字 (多行，向左对齐排版)
+        # 绘制右名字 (向左对齐)
         draw.multiline_text(
-            (center_x + 25, row_center_y), 
+            (center_x + (icon_width // 2) + 10, row_center_y), 
             cp['n2_text'], 
             font=font_item, 
             fill=color_text, 
