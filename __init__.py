@@ -5,6 +5,7 @@ from gsuid_core.logger import logger
 from datetime import datetime
 
 from .draw import draw_cp_image
+from .draw import draw_cp_image, draw_help_image
 
 from .core import (
     record_speak, process_marry, process_force_marry,
@@ -141,3 +142,10 @@ async def _clear(bot: Bot, ev: Event):
         await bot.send('今日娶群友数据已清除！')
     else:
         await bot.send('今日还没有娶群友数据！')
+
+# 帮助菜单
+@gs_marry.on_fullmatch(('wife帮助', '娶群友帮助', 'waifu帮助'))
+async def _help_cmd(bot: Bot, ev: Event):
+    # 发送通过 PIL 渲染的精美帮助图
+    img_bytes = draw_help_image()
+    await bot.send(img_bytes)
