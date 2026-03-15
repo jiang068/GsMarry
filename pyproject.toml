@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "gs-marry"
+name = "GsMarry"
 version = "1.0.0"
-description = "GsCore 娶群友插件 - 群聊互动娱乐插件"
+description = "Gscore 插件 - 娶群友"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
