@@ -4,10 +4,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from .config import marry_config
 
-# 【优化 3】：字体实例缓存，避免反复读取大体积 TTF 文件
 _font_cache = {}
-
-# 【优化 4】：静态帮助图全局缓存，一次渲染，永久秒发
 _help_img_cache = None
 
 def get_font(size: int) -> ImageFont.FreeTypeFont:
@@ -59,7 +56,6 @@ def generate_glass_bg(width: int, height: int, margin: int, radius: int = 20) ->
             new_h = int(bg.width / target_ratio)
             offset = (bg.height - new_h) // 2
             bg = bg.crop((0, offset, bg.width, offset + new_h))
-        # 背景使用 BILINEAR 即可，比 LANCZOS 速度快几倍且对于底图肉眼无差别
         bg = bg.resize((width, height), Image.Resampling.BILINEAR)
     else:
         base = Image.new('RGB', (1, 2))
@@ -73,7 +69,6 @@ def generate_glass_bg(width: int, height: int, margin: int, radius: int = 20) ->
     draw_mask.rounded_rectangle(panel_box, radius=radius, fill=255)
     
     glass = bg.copy().crop(panel_box)
-    # 【优化 5】：使用 BoxBlur(方框模糊) 替换 GaussianBlur(高斯模糊)，计算量骤降 80%
     glass = glass.filter(ImageFilter.BoxBlur(15))
     tint = Image.new('RGBA', glass.size, (255, 255, 255, 150))
     glass = Image.alpha_composite(glass.convert('RGBA'), tint).convert('RGB')
@@ -84,6 +79,11 @@ def generate_glass_bg(width: int, height: int, margin: int, radius: int = 20) ->
 def draw_cp_image(cps_data: list, title: str) -> bytes:
     width, title_h, margin, padding = 800, 100, 25, 30
     font_title, font_item = get_font(42), get_font(30)
+    
+    # 获取页脚配置
+    footer_text = marry_config.get_config('footer_text').data
+    footer_space = 50 if footer_text else 0
+    font_footer = get_font(24)
     
     assets_dir = Path(__file__).parent / 'assets'
     heart_path = assets_dir / 'heart.png'
@@ -112,7 +112,8 @@ def draw_cp_image(cps_data: list, title: str) -> bytes:
         })
         total_list_h += row_h
 
-    height = title_h + total_list_h + padding + margin * 2
+    # 高度加上 footer_space
+    height = title_h + total_list_h + padding + footer_space + margin * 2
     bg = generate_glass_bg(width, height, margin)
     draw = ImageDraw.Draw(bg)
     center_x = width // 2
@@ -142,6 +143,10 @@ def draw_cp_image(cps_data: list, title: str) -> bytes:
         draw.multiline_text((center_x + (icon_width // 2) + 10, row_center_y), cp['n2_text'], 
                             font=font_item, fill=color_text, anchor="lm", align="left", spacing=8)
         current_y += cp['row_h']
+        
+    # 绘制页脚
+    if footer_text:
+        draw.text((center_x, current_y + 20), footer_text, font=font_footer, fill=(50, 50, 50), anchor="mm")
     
     buf = io.BytesIO()
     bg.save(buf, format='PNG')
@@ -154,6 +159,11 @@ def draw_help_image() -> bytes:
 
     width, title_h, margin, padding = 850, 110, 25, 30
     font_title, font_cmd, font_desc = get_font(46), get_font(34), get_font(30)
+    
+    # 获取页脚配置
+    footer_text = marry_config.get_config('footer_text').data
+    footer_space = 50 if footer_text else 0
+    font_footer = get_font(24)
     
     help_items = [
         ("娶群友 / waifu", "随机娶一个群友做今日老婆"),
@@ -175,7 +185,8 @@ def draw_help_image() -> bytes:
         parsed_items.append((cmd, lines, item_h))
         total_items_h += item_h
         
-    height = margin * 2 + title_h + total_items_h + padding
+    # 高度加上 footer_space
+    height = margin * 2 + title_h + total_items_h + padding + footer_space
     bg = generate_glass_bg(width, height, margin)
     draw = ImageDraw.Draw(bg)
     
@@ -191,6 +202,10 @@ def draw_help_image() -> bytes:
             draw.text((desc_x, text_y), line, font=font_desc, fill=(70, 70, 70), anchor="lt")
             text_y += 40
         current_y += item_h
+        
+    # 绘制页脚
+    if footer_text:
+        draw.text((width // 2, current_y + 20), footer_text, font=font_footer, fill=(50, 50, 50), anchor="mm")
     
     buf = io.BytesIO()
     bg.save(buf, format='PNG')
