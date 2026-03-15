@@ -1,0 +1,14 @@
+# GS娶群友插件依赖
+# Core dependencies
+# gsuid_core>=4.0.0
+
+# HTTP client for avatar fetching
+httpx>=0.24.0
+
+# Standard library dependencies (already included in Python)
+# - json
+# - os  
+# - random
+# - datetime
+# - pathlib
+# - typing

@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gs-marry"
+version = "1.0.0"
+description = "GsCore 娶群友插件 - 群聊互动娱乐插件"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "gsuid_core>=4.0.0",
+    "httpx>=0.24.0",
+]
+
+[tool.setuptools]
+packages = ["gs_marry"]
+package-dir = {"" = "."}
+
+[tool.setuptools.package-data]
+gs_marry = ["*.json", "data/*"]
