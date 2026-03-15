@@ -22,7 +22,10 @@ def save_data(gid: str, data: dict):
 def get_daily(data: dict) -> dict:
     t = get_today()
     if t not in data["daily"]: 
-        data["daily"][t] = {"couples": {}, "forces": {}}
+        data["daily"][t] = {"couples": {}, "forces": {}, "divorced": []}
+    # 兼容老数据，如果没有 divorced 列表则补上
+    if "divorced" not in data["daily"][t]:
+        data["daily"][t]["divorced"] = []
     return data["daily"][t]
 
 def record_speak(gid: str, uid: str, name: str):
@@ -97,6 +100,8 @@ def process_force_marry(gid: str, uid: str, target: str, target_name: str) -> tu
     forces["success"] += 1
     if target_married:
         old_partner = daily["couples"][target]
+        # 【新增】横刀夺爱导致原配偶被动离婚，记录到离婚池中
+        daily["divorced"].append((target, old_partner))
         del daily["couples"][old_partner] # 踢掉原来的配偶
 
     # 建立新的双向绑定
@@ -117,8 +122,12 @@ def process_divorce(gid: str, uid: str) -> tuple[bool, str, str]:
     if uid not in daily["couples"]:
         return False, "", ""
 
-    # 解除双向绑定（再也不会有bug了）
+    # 解除双向绑定
     partner = daily["couples"][uid]
+    
+    # 【新增】将这对苦命鸳鸯加入离婚记录表
+    daily["divorced"].append((uid, partner))
+
     del daily["couples"][uid]
     if partner in daily["couples"]: 
         del daily["couples"][partner]
@@ -130,12 +139,21 @@ def get_cps(gid: str) -> list:
     d = load_data(gid)
     daily = get_daily(d)
     seen, res = set(), []
+    
+    # 1. 遍历当前健在的 CP
     for u1, u2 in daily["couples"].items():
         if u1 in seen or u2 in seen: continue
         seen.add(u1); seen.add(u2)
         n1 = d["users"].get(u1, {}).get("name", u1)
         n2 = d["users"].get(u2, {}).get("name", u2)
         res.append(f"{n1} ❤️ {n2}")
+        
+    # 2. 【新增】遍历今日离婚的 CP
+    for u1, u2 in daily.get("divorced", []):
+        n1 = d["users"].get(u1, {}).get("name", u1)
+        n2 = d["users"].get(u2, {}).get("name", u2)
+        res.append(f"{n1} 💔 {n2} (已离婚)")
+        
     return res
 
 def get_force_record(gid: str, uid: str) -> str:
